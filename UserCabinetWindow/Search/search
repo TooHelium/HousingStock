@@ -124,7 +124,7 @@ def showSearch(username, root, connection, driver):
                                             text="Like",
                                             variable=like_var,
                                             command=onCheckboxChange)
-                like_checkbox.place(x=300, y = 450)
+                like_checkbox.place(x=230, y = 450)
 
                 displayCurrentRecord()
  
