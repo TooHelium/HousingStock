@@ -1,0 +1,193 @@
+from tkinter import *
+from tkinter import messagebox
+
+def showMyApartments(username, root, connection, driver):
+
+        def watchMyApartments(rows):
+            global current_index
+            current_index = 0
+
+            my_apartments_window = Toplevel(root)
+            my_apartments_window.title("Мої квартири")
+            my_apartments_window.geometry("500x500")
+            my_apartments_window.resizable(False, False)
+
+            def displayCurrentRecord():                    
+                text_widget.delete(1.0, END)
+                    
+                current_record = rows[current_index]
+                columns_names = [
+                        "Apartment's id: ",
+                        "District: ",
+                        "Street: ",
+                        "Building's name: ",
+                        "Area: ",
+                        "Rooms: ",
+                        "Is furnished: ",
+                        "Has balcony: ",
+                        "Has parking: ",
+                        "Estimated price: ",
+                        "Description: "
+                        ]
+
+                result = [name + str(value) for name, value in zip(columns_names, current_record)]
+
+                text_widget.insert(END, f"Apartment № {current_index+1}\n")
+                for row in result:
+                    text_widget.insert(END, f"{row}\n")
+            
+            def showWhoInterestedIn():
+            ##############################################
+                def showInterestedUsers(apartment_id, rows):
+                    global current_index_interested
+                    current_index_interested = 0
+
+                    interested_users_window = Toplevel(my_apartments_window)
+                    interested_users_window.title("Зацікавлені особи")
+                    interested_users_window.geometry("500x500")
+                    interested_users_window.resizable(False, False)
+
+                    def displayCurrentRecord():
+                        global interested_liker_username
+                        text_widget.delete(1.0, END)
+                    
+                        current_record = rows[current_index_interested]
+                        interested_liker_username = current_record[0]
+
+                        text_widget.insert(END, f"User № {current_index_interested+1}\n")
+                        for value in current_record:
+                            text_widget.insert(END, f"{value}\n")
+                    
+                        with driver.session() as session:
+                            query = ("MATCH (u:User {username: $liker_username})"
+                                     "MATCH (o:User {username: $owner_username})"
+                                     "MATCH (o)-[r:CONTRACT {apartment_id: $ID}]->(u)"
+                                     "RETURN COUNT(r) > 0 AS contractExists;")
+                        
+                            result = session.run(query,
+                                                 liker_username=interested_liker_username,
+                                                 owner_username=username,
+                                                 ID=apartment_id)
+                            contract_exists = result.single()["contractExists"]
+
+                            contract_var.set(contract_exists)
+
+                    def onCheckboxChange():
+                        contract = contract_var.get()
+
+                        with driver.session() as session:
+                            if contract:
+                                query = ("MATCH (u:User {username: $liker_username}) "
+                                         "MATCH (o:User {username: $owner_username}) "
+                                         "MERGE (o)-[:CONTRACT {apartment_id: $ID}]->(u);")
+                            else:
+                                query = ("MATCH (u:User {username: $liker_username}) "
+                                         "MATCH (o:User {username: $owner_username}) "
+                                         "MATCH (o)-[r:CONTRACT {apartment_id: $ID}]->(u) "
+                                         "DELETE r;")
+        
+                            session.run(query,
+                                        liker_username=interested_liker_username,
+                                        owner_username=username,
+                                        ID=apartment_id)
+                    
+                        
+                    def show_previous_record():
+                        global current_index_interested
+                        if current_index_interested > 0:
+                            current_index_interested -= 1
+                            displayCurrentRecord()
+
+                    def show_next_record():
+                        global current_index_interested
+                        if current_index_interested < len(rows) - 1:
+                            current_index_interested += 1
+                            displayCurrentRecord()
+
+                    text_widget = Text(interested_users_window, wrap="word", height=20, width=60)
+                    text_widget.pack(pady=10)
+
+                    back_button = Button(interested_users_window, text="Back", command=show_previous_record)
+                    back_button.pack(side="left", padx=20, pady=20)
+        
+                    next_button = Button(interested_users_window, text="Next", command=show_next_record)
+                    next_button.pack(side="right", padx=20, pady=20)
+
+                    contract_var = IntVar()
+                    contract_checkbox = Checkbutton(interested_users_window,
+                                                text="Contract with",
+                                                variable=contract_var,
+                                                command=onCheckboxChange)
+                    contract_checkbox.place(x=215, y = 430)
+
+                    displayCurrentRecord()
+                    
+                with driver.session() as session:
+                    query = ("MATCH (u:User)-[:LIKES]-"
+                             ">(:Apartment {id: $ID})<"
+                             "-[:OWNS]-(:User {username: $owner_username})"
+                             "RETURN u.username AS username;")
+        
+                    result = session.run(query,
+                                         ID=rows[current_index][0],
+                                         owner_username=username)
+                    
+                    users_username = [record["username"] for record in result]
+
+                    if len(users_username) == 0:
+                        messagebox.showinfo("Info", "No one interested in this apartment yet")
+                    else:
+                        with connection.cursor() as cursor:
+                            cursor.execute(
+                                    "SELECT username, email, phone_number "
+                                    "FROM users "
+                                    "WHERE username = ANY(%s)",
+                                    (users_username,))
+                            res = cursor.fetchall()
+                        showInterestedUsers(rows[current_index][0], res)
+
+                                      
+            def show_previous_record():
+                global current_index
+                if current_index > 0:
+                    current_index -= 1
+                    displayCurrentRecord()
+
+            def show_next_record():
+                global current_index
+                if current_index < len(rows) - 1:
+                    current_index += 1
+                    displayCurrentRecord()
+
+
+            text_widget = Text(my_apartments_window, wrap="word", height=20, width=60)
+            text_widget.pack(pady=10)
+
+            back_button = Button(my_apartments_window, text="Back", command=show_previous_record)
+            back_button.pack(side="left", padx=20, pady=20)
+        
+            next_button = Button(my_apartments_window, text="Next", command=show_next_record)
+            next_button.pack(side="right", padx=20, pady=20)
+
+            who_interested_in_button = Button(my_apartments_window,
+                                        text="Who interested in?",
+                                        command=showWhoInterestedIn)
+            who_interested_in_button.place(x=190, y = 430)
+
+            displayCurrentRecord()
+        
+        
+        with connection.cursor() as cursor:
+            cursor.execute(
+                    "SELECT apartments.id, districts.name, streets.name, building_name, "
+                    "area, rooms, is_furnished, has_balcony, has_parking, "
+                    "estimated_price, description FROM apartments "
+                    "JOIN streets ON apartments.street_id = streets.id "
+                    "JOIN districts ON streets.district_id = districts.id "
+                    f"WHERE user_id = '{username}'")
+            rows = cursor.fetchall()
+            
+        if len(rows) == 0:
+            messagebox.showinfo("Info", "You have no apartments")
+        else:            
+            watchMyApartments(rows)
