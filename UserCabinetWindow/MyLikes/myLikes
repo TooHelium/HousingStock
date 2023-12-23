@@ -1,0 +1,135 @@
+from tkinter import *
+from tkinter import messagebox
+
+def showMyLikes(username, root, connection, driver):
+
+        def watchMyLikes(rows):
+            global current_index
+            current_index = 0
+
+            my_likes_window = Toplevel(root)
+            my_likes_window.title("My likes")
+            my_likes_window.geometry("500x500")
+            my_likes_window.resizable(False, False)
+
+            def displayCurrentRecord():
+                global owner_username
+                    
+                text_widget.delete(1.0, END)
+                    
+                current_record = rows[current_index]
+                owner_username = current_record[1]
+
+                columns_names = [
+                        "Apartment's id: ",
+                        "Owner's username: ",
+                        "District: ",
+                        "Street: ",
+                        "Building: ",
+                        "Area: ",
+                        "Rooms: ",
+                        "Is furnished: ",
+                        "Has balcony: ",
+                        "Has parking: ",
+                        "Estimated price: ",
+                        "Description: "
+                        ]
+
+                result = [name + str(value) for name, value in zip(columns_names, current_record)]
+
+                text_widget.insert(END, f"Apartment № {current_index+1}\n")
+                for row in result:
+                    text_widget.insert(END, f"{row}\n")
+                    
+                with driver.session() as session:
+                    query = ("MATCH (:User {username: $liker_username})-[r:LIKES]"
+                             "->(:Apartment {id: $ID})<-[:OWNS]"
+                             "-(:User {username: $owner_username}) "
+                             "RETURN COUNT(r) > 0 AS apartmentExists;")
+                        
+                    result = session.run(query, liker_username=username, ID=current_record[0], owner_username=owner_username)
+                    apartment_exists = result.single()["apartmentExists"]
+
+                    like_var.set(apartment_exists)
+
+            def onCheckboxChange():
+                liked = like_var.get()
+
+                with driver.session() as session:
+                    if liked:
+                        query = ("MERGE (u:User {username: $liker_username}) "
+                                 "MERGE (a:Apartment {id: $ID}) "
+                                 "MERGE (u)-[:LIKES]->(a) "
+                                 "MERGE (o:User {username: $owner_username}) "
+                                 "MERGE (o)-[:OWNS]->(a);")
+                    else:
+                        query = ("MATCH (u:User {username: $liker_username}) "
+                                 "MATCH (a:Apartment {id: $ID}) "
+                                 "MATCH (u)-[r:LIKES]->(a) "
+                                 "MATCH (o:User {username: $owner_username}) "
+                                 "MATCH (o)-[:OWNS]->(a) "
+                                 "DELETE r;")
+        
+                    session.run(query, liker_username=username,
+                                ID=rows[current_index][0],
+                                owner_username=owner_username)
+                        
+                    query = ("MATCH (n) WHERE NOT (n)--() DELETE n;")#clear single nodes
+                    session.run(query)
+                    
+                        
+            def show_previous_record():
+                global current_index
+                if current_index > 0:
+                    current_index -= 1
+                    displayCurrentRecord()
+
+            def show_next_record():
+                global current_index
+                if current_index < len(rows) - 1:
+                    current_index += 1
+                    displayCurrentRecord()
+
+            text_widget = Text(my_likes_window, wrap="word", height=20, width=60)
+            text_widget.pack(pady=10)
+
+            back_button = Button(my_likes_window, text="Back", command=show_previous_record)
+            back_button.pack(side="left", padx=20, pady=20)
+        
+            next_button = Button(my_likes_window, text="Next", command=show_next_record)
+            next_button.pack(side="right", padx=20, pady=20)
+
+            like_var = IntVar()
+            like_checkbox = Checkbutton(my_likes_window,
+                                        text="Like",
+                                        variable=like_var,
+                                        command=onCheckboxChange)
+            like_checkbox.place(x=238, y = 430)
+
+            displayCurrentRecord()
+        
+        with driver.session() as session:
+            query = ("MATCH (u:User {username: $liker_username})-[r:LIKES]"
+                     "->(a:Apartment)"
+                     "RETURN a.id as apartmentId;")
+                        
+            result = session.run(query, liker_username=username)
+            apartments_id = [record["apartmentId"] for record in result]
+
+            if len(apartments_id) == 0:
+                messagebox.showinfo("Info", "You did not like any apartment")
+            else:
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                            "SELECT apartments.id, apartments.user_id, districts.name, streets.name, "
+                            "building_name, area, rooms, "
+                            "is_furnished, has_balcony, has_parking, "
+                            "estimated_price, description "
+                            "FROM apartments "
+                            "JOIN streets "
+                            "ON apartments.street_id=streets.id "
+                            "JOIN districts "
+                            "ON streets.district_id=districts.id "
+                            "WHERE apartments.id = ANY(%s)",
+                            (apartments_id,))
+                    watchMyLikes(cursor.fetchall())
