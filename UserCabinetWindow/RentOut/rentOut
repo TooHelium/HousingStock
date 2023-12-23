@@ -1,0 +1,131 @@
+from tkinter import *
+from tkinter import messagebox
+
+def showRentOut(username, root, connection, driver):
+        rent_out_window = Toplevel(root)
+        rent_out_window.title("Здати в аренду")
+        rent_out_window.geometry("500x500")
+        rent_out_window.resizable(False, False)
+
+        def rentOutApartment():
+            global streets_id, streets_name
+            
+            building_name = building_name_entry.get()
+            area = area_entry.get()
+            rooms = rooms_entry.get()
+            is_furnished = is_furnished_var.get()
+            has_balcony = has_balcony_var.get()
+            has_parking = has_parking_var.get()
+            description = description_entry.get()
+            estimated_price = estimated_price_entry.get()
+
+            if (not building_name or
+                not area or
+                not rooms or
+                not description or
+                not estimated_price):
+                messagebox.showwarning("Warning", "All fields must be filled")
+            else:
+                with connection.cursor() as cursor:
+                    street_id = streets_id[streets_name.index(street_var.get())]
+                    cursor.execute(
+                        "INSERT INTO apartments "
+                        "(building_name, area, rooms, "
+                        "is_furnished, has_balcony, has_parking, "
+                        "description, estimated_price, "
+                        "street_id, user_id) "
+                        "VALUES "
+                        f"('{building_name}', '{area}', '{rooms}', "
+                        f"'{is_furnished}', '{has_balcony}', '{has_parking}', "
+                        f"'{description}', '{estimated_price}', "
+                        f"'{street_id}', '{username}');")
+
+        def updateStreetsDropdown(*args):
+            global streets_id, streets_name
+            
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT streets.id, streets.name FROM streets "
+                               "JOIN districts "
+                               "ON streets.district_id = districts.id "
+                               f"WHERE districts.name = '{district_var.get()}';")
+                streets_id_name = cursor.fetchall()
+                streets_id = [row[0] for row in streets_id_name]
+                streets_name = [row[1] for row in streets_id_name]
+                
+
+            street_var.set(streets_name[0])  # Set the default value
+            street_dropdown['menu'].delete(0, 'end')  # Clear the existing menu items
+            for street_name in streets_name:
+                street_dropdown['menu'].add_command(label=street_name, command=lambda name=street_name: street_var.set(name))
+
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id, name FROM districts;")
+            districts_id_name = cursor.fetchall()
+            districts_id = [row[0] for row in districts_id_name]
+            districts_name = [row[1] for row in districts_id_name]       
+        district_var = StringVar(rent_out_window)
+        district_var.set(districts_name[0])  # Set the default value
+        district_var.trace_add('write', updateStreetsDropdown) 
+        district_dropdown = OptionMenu(rent_out_window,
+                                       district_var,
+                                       *districts_name)
+
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT streets.id, streets.name FROM streets "
+                            "JOIN districts "
+                            "ON streets.district_id = districts.id "
+                            f"WHERE districts.name = '{district_var.get()}';")
+            streets_id_name = cursor.fetchall()
+            streets_id = [row[0] for row in streets_id_name]
+            streets_name = [row[1] for row in streets_id_name]
+        
+        street_var = StringVar(rent_out_window)
+        street_var.set(streets_name[0])
+        street_dropdown = OptionMenu(rent_out_window,
+                                     street_var,
+                                     *streets_name)
+
+         
+        building_name_entry = Entry(rent_out_window, width=30)
+        area_entry = Entry(rent_out_window, width=30)
+        rooms_entry = Entry(rent_out_window, width=30)
+
+        is_furnished_var = IntVar()
+        is_furnished_checkbox = Checkbutton(rent_out_window, text="Furnished", variable=is_furnished_var)
+
+        has_balcony_var = IntVar()
+        has_balcony_checkbox = Checkbutton(rent_out_window, text="Has Balcony", variable=has_balcony_var)
+
+        has_parking_var = IntVar()
+        has_parking_checkbox = Checkbutton(rent_out_window, text="Has Parking", variable=has_parking_var)
+
+        description_entry = Entry(rent_out_window, width=30)
+        estimated_price_entry = Entry(rent_out_window, width=30)
+
+        Label(rent_out_window, text="Building Name:").grid(row=0, column=0, padx=10, pady=5)
+        Label(rent_out_window, text="Area:").grid(row=1, column=0, padx=10, pady=5)
+        Label(rent_out_window, text="Rooms:").grid(row=2, column=0, padx=10, pady=5)
+        Label(rent_out_window, text="Features:").grid(row=3, column=0, padx=10, pady=5)
+        Label(rent_out_window, text="Description:").grid(row=4, column=0, padx=10, pady=5)
+        Label(rent_out_window, text="Estimated Price:").grid(row=5, column=0, padx=10, pady=5)
+        Label(rent_out_window, text="District:").grid(row=6, column=0, padx=10, pady=5)
+        Label(rent_out_window, text="Street:").grid(row=7, column=0, padx=10, pady=5)
+
+        building_name_entry.grid(row=0, column=1, padx=10, pady=10)
+        area_entry.grid(row=1, column=1, padx=10, pady=10)
+        rooms_entry.grid(row=2, column=1, padx=10, pady=10)
+
+        is_furnished_checkbox.grid(row=3, column=1, padx=(10, 10), sticky="w")
+        has_balcony_checkbox.grid(row=3, column=1, padx=(120, 10), sticky="w")
+        has_parking_checkbox.grid(row=3, column=1, padx=(230, 10), sticky="w")
+
+        description_entry.grid(row=4, column=1, padx=10, pady=10)
+        estimated_price_entry.grid(row=5, column=1, padx=10, pady=10)
+
+        district_dropdown.grid(row=6, column=1, padx=10, pady=10, sticky="ew")
+        street_dropdown.grid(row=7, column=1, padx=10, pady=10, sticky="ew")
+
+        rent_out_button = Button(rent_out_window, text="Rent Out", command=rentOutApartment)
+        rent_out_button.grid(row=8, column=0, columnspan=2, pady=40)
