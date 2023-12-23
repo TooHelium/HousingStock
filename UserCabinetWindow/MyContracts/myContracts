@@ -1,0 +1,500 @@
+from tkinter import *
+from tkinter import messagebox
+
+def showMyContracts(username, root, connection, driver):
+        def watchMyContracts(rows):
+            global current_index
+            current_index = 0
+
+            my_contracts_window = Toplevel(root)
+            my_contracts_window.title("Мої контракти")
+            my_contracts_window.geometry("500x500")
+            my_contracts_window.resizable(False, False)
+
+            def displayCurrentRecord():
+                with connection.cursor() as cursor:
+                    cursor.execute(
+                            "SELECT building_name, area, rooms, "
+                            "is_furnished, has_balcony, has_parking, "
+                            "estimated_price, description "
+                            "FROM apartments "
+                            f"WHERE id = {rows[current_index]};")
+                    current_apartment = cursor.fetchone()
+
+                    columns_names = [
+                        "Building's name: ",
+                        "Area: ",
+                        "Rooms: ",
+                        "Is furnished: ",
+                        "Has balcony: ",
+                        "Has parking: ",
+                        "Estimated price: ",
+                        "Description: "
+                        ]
+
+                    result = [name + str(value) for name, value in zip(columns_names, current_apartment)]
+                    
+                    apartment_text_widget.delete(1.0, END)
+
+                    apartment_text_widget.insert(END, f"Apartment\n")
+                    for row in result:
+                        apartment_text_widget.insert(END, f"{row}\n")
+
+                with driver.session() as session:
+                    query = ("MATCH (:User)-"
+                             "[c:CONTRACT {apartment_id: $ID}]-"
+                             ">(:User)"
+                             "RETURN c.owner_info AS owner_info;")
+                        
+                    result = session.run(query, ID=rows[current_index])
+                    owner_info = result.single()["owner_info"]
+
+                    columns_names = [
+                        "Lessor's fullname: ",
+                        "Serial id: ",
+                        "Record id: ",
+                        "Username: ",
+                        "Final price: ",
+                        "Period: "
+                        ]
+
+                    owner_text_widget.delete(1.0, END)
+                    owner_text_widget.insert(END, f"Owner\n")
+
+                    if owner_info:
+                        result = [name + str(value) for name, value in zip(columns_names, owner_info)]
+                        for row in result:
+                            owner_text_widget.insert(END, f"{row}\n")
+                    else:
+                        owner_text_widget.insert(END, "No information yet\n")
+                        
+
+                with driver.session() as session:
+                    query = ("MATCH (:User)-"
+                             "[c:CONTRACT {apartment_id: $ID}]-"
+                             ">(:User)"
+                             "RETURN c.liker_info AS liker_info;")
+                        
+                    result = session.run(query, ID=rows[current_index])
+                    liker_info = result.single()["liker_info"]
+
+                    columns_names = [
+                        "Lessor's fullname: ",
+                        "Serial id: ",
+                        "Record id: ",
+                        "Username: "
+                        ]
+
+                    liker_text_widget.delete(1.0, END)
+                    liker_text_widget.insert(END, f"Liker\n")
+
+                    if liker_info:
+                        result = [name + str(value) for name, value in zip(columns_names, liker_info)]
+                        for row in result:
+                            liker_text_widget.insert(END, f"{row}\n")
+                    else:
+                        liker_text_widget.insert(END, "No information yet\n")
+                                    
+            ##############################################
+            def deleteMyself():
+
+                def deleteOwner():
+                    ##########################################################
+                    with driver.session() as session:
+                        query = ("MATCH (:User)-"
+                                 "[c:CONTRACT {apartment_id: $ID}]-"
+                                 ">(:User) "
+                                 "RETURN c.liker_info AS liker_info;")
+                        res = session.run(query,
+                                          ID=rows[current_index])
+                        liker_info = res.single()["liker_info"]
+
+                        query = ("MATCH (:User)-"
+                                 "[c:CONTRACT {apartment_id: $ID}]-"
+                                 ">(:User) "
+                                 "RETURN c.owner_info AS owner_info;")
+                        res = session.run(query,
+                                          ID=rows[current_index])
+                        owner_info = res.single()["owner_info"]
+
+                        if owner_info is not None:
+                            with connection.cursor() as cursor:
+                                cursor.execute(
+                                        "DELETE FROM lessors "
+                                        "WHERE "
+                                        f"fullname='{owner_info[0]}' AND "
+                                        f"serial_id='{owner_info[1]}' AND "
+                                        f"record_id='{owner_info[2]}' AND "
+                                        f"user_id='{owner_info[3]}';")
+
+                                if liker_info is not None:
+                                    cursor.execute(
+                                            "DELETE FROM tenants "
+                                            "WHERE "
+                                            f"fullname='{liker_info[0]}' AND "
+                                            f"serial_id='{liker_info[1]}' AND "
+                                            f"record_id='{liker_info[2]}' AND "
+                                            f"user_id='{liker_info[3]}';")
+
+                            query = ("MATCH (:User)-"
+                                     "[c:CONTRACT {apartment_id: $ID}]-"
+                                     ">(:User) "
+                                     "SET c.owner_info = NULL;")
+                            session.run(query,
+                                        ID=rows[current_index])
+                        else:
+                            messagebox.showwarning("Warning", "You can not delete the contract you did not create")
+                            
+                def deleteLiker():
+                    with driver.session() as session:
+                        query = ("MATCH (:User)-"
+                                 "[c:CONTRACT {apartment_id: $ID}]-"
+                                 ">(:User) "
+                                 "RETURN c.liker_info AS liker_info;")
+                        res = session.run(query,
+                                          ID=rows[current_index])
+                        liker_info = res.single()["liker_info"]
+
+                        query = ("MATCH (:User)-"
+                                 "[c:CONTRACT {apartment_id: $ID}]-"
+                                 ">(:User) "
+                                 "RETURN c.owner_info AS owner_info;")
+                        res = session.run(query,
+                                          ID=rows[current_index])
+                        owner_info = res.single()["owner_info"]
+
+                        if liker_info is not None:
+                            with connection.cursor() as cursor:
+                                cursor.execute(
+                                        "DELETE FROM tenants "
+                                        "WHERE "
+                                        f"fullname='{liker_info[0]}' AND "
+                                        f"serial_id='{liker_info[1]}' AND "
+                                        f"record_id='{liker_info[2]}' AND "
+                                        f"user_id='{liker_info[3]}';")
+
+                                if owner_info is not None:
+                                    cursor.execute(
+                                            "DELETE FROM lessors "
+                                            "WHERE "
+                                            f"fullname='{owner_info[0]}' AND "
+                                            f"serial_id='{owner_info[1]}' AND "
+                                            f"record_id='{owner_info[2]}' AND "
+                                            f"user_id='{owner_info[3]}';")
+
+                            query = ("MATCH (:User)-"
+                                     "[c:CONTRACT {apartment_id: $ID}]-"
+                                     ">(:User) "
+                                     "SET c.liker_info = NULL;")
+                            session.run(query,
+                                        ID=rows[current_index])
+                        else:
+                            messagebox.showwarning("Warning", "You can not delete the contract you did not create")
+
+
+
+                    ##############################
+                
+                with driver.session() as session:
+                    query = ("MATCH (o:User {username: $username})-"
+                             "[:CONTRACT {apartment_id: $ID}]-"
+                             ">(:User) "
+                             "RETURN COUNT(o) > 0 AS is_owner;")
+                        
+                    result = session.run(query,
+                                         username=username,
+                                         ID=rows[current_index])
+
+                    if result.single()["is_owner"]:
+                        deleteOwner()
+                    else:
+                        deleteLiker()
+
+
+
+            def addMyself():
+                def addOwner():
+                    def getUserCredentials():
+                        with driver.session() as session:
+                            query = ("MATCH (:User)-"
+                                     "[c:CONTRACT {apartment_id: $ID}]-"
+                                     ">(:User) "
+                                     "RETURN ((c.liker_info IS NOT NULL) AND "
+                                     "(c.owner_info IS NOT NULL)) AS both_ready;")
+
+                            result = session.run(query,
+                                                 ID=rows[current_index])
+
+                            if result.single()["both_ready"]:
+                                messagebox.showwarning("Warning", "You can add yourself only once")
+                                return
+                            
+                        fullname = fullname_entry.get()
+                        serial_number = serial_number_entry.get()
+                        record_number = record_number_entry.get()
+                        final_price = final_price_entry.get()
+                        period = period_entry.get()
+
+                        if (not fullname or
+                            not serial_number or
+                            not record_number or
+                            not final_price or
+                            not period):
+                            messagebox.showwarning("Warning", "All fields must be filled")
+                        else:
+                            owner_info_list = []
+                            owner_info_list.append(fullname)
+                            owner_info_list.append(serial_number)
+                            owner_info_list.append(record_number)
+                            owner_info_list.append(username)
+                            owner_info_list.append(final_price)
+                            owner_info_list.append(period)
+                        
+                            
+                            with driver.session() as session:
+                                query = ("MATCH (:User)-"
+                                         "[c:CONTRACT {apartment_id: $ID}]-"
+                                         ">(:User) "
+                                         "SET c.owner_info = $info;")
+                        
+                                session.run(query,
+                                            info=owner_info_list,
+                                            ID=rows[current_index])
+
+                                query = ("MATCH (:User)-"
+                                         "[c:CONTRACT {apartment_id: $ID}]-"
+                                         ">(:User) "
+                                         "RETURN ((c.liker_info IS NOT NULL) AND "
+                                         "(c.owner_info IS NOT NULL)) AS both_ready;")
+
+                                result = session.run(query,
+                                            ID=rows[current_index])
+
+                                if result.single()["both_ready"]:
+                                    addToRentings()
+                                    
+    
+                    add_owner_window = Toplevel(my_contracts_window)
+                    add_owner_window.title("Add owner")
+                    add_owner_window.geometry("500x500")
+
+                    fullname_entry = Entry(add_owner_window, width=30)
+                    fullname_entry.place(x=175, y=80)
+
+                    serial_number_entry = Entry(add_owner_window, width=30)
+                    serial_number_entry.place(x=175, y=160)
+
+                    record_number_entry = Entry(add_owner_window, width=30)
+                    record_number_entry.place(x=175, y=200)
+
+                    final_price_entry = Entry(add_owner_window, width=30)
+                    final_price_entry.place(x=175, y=240)
+
+                    period_entry = Entry(add_owner_window, width=30)
+                    period_entry.place(x=175, y=300)
+
+                    add_button = Button(add_owner_window,
+                                           text="Add",
+                                           command=getUserCredentials)
+                    add_button.place(x=175, y=350)
+
+                def addToRentings():
+                    with driver.session() as session:
+                        query = ("MATCH (:User)-"
+                                 "[c:CONTRACT {apartment_id: $ID}]-"
+                                 ">(:User) "
+                                 "RETURN c.liker_info AS liker_info;")
+                        res = session.run(query,
+                                          ID=rows[current_index])
+                        liker_info = res.single()["liker_info"]
+
+                        query = ("MATCH (:User)-"
+                                 "[c:CONTRACT {apartment_id: $ID}]-"
+                                 ">(:User) "
+                                 "RETURN c.owner_info AS owner_info;")
+                        res = session.run(query,
+                                          ID=rows[current_index])
+                        owner_info = res.single()["owner_info"]
+
+                        with connection.cursor() as cursor:
+                            cursor.execute(
+                                    "INSERT INTO tenants "
+                                    "(fullname, serial_id, record_id, user_id) "
+                                    "VALUES "
+                                    f"('{liker_info[0]}', '{liker_info[1]}', "
+                                    f"'{liker_info[2]}', '{liker_info[3]}') "
+                                    "RETURNING id;")
+                            tenant_id = cursor.fetchone()[0]
+
+                            cursor.execute(
+                                    "INSERT INTO lessors "
+                                    "(fullname, serial_id, record_id, user_id) "
+                                    "VALUES "
+                                    f"('{owner_info[0]}', '{owner_info[1]}', "
+                                    f"'{owner_info[2]}', '{owner_info[3]}') "
+                                    "RETURNING id;")
+                            lessor_id = cursor.fetchone()[0]
+
+                            cursor.execute(
+                                    "INSERT INTO rentings "
+                                    "(final_price, period, tenant_id, lessor_id, apartment_id) "
+                                    "VALUES "
+                                    f"({owner_info[4]}, {owner_info[5]}, "
+                                    f"{tenant_id}, {lessor_id}, {rows[current_index]});")
+
+                def addLiker():
+                    def getUserCredentials():
+                        with driver.session() as session:
+                            query = ("MATCH (:User)-"
+                                     "[c:CONTRACT {apartment_id: $ID}]-"
+                                     ">(:User) "
+                                     "RETURN ((c.liker_info IS NOT NULL) AND "
+                                     "(c.owner_info IS NOT NULL)) AS both_ready;")
+
+                            result = session.run(query,
+                                                 ID=rows[current_index])
+
+                            if result.single()["both_ready"]:
+                                messagebox.showwarning("Warning", "You can add yourself only once")
+                                return
+                            
+                        fullname = fullname_entry.get()
+                        serial_number = serial_number_entry.get()
+                        record_number = record_number_entry.get()
+
+                        if (not fullname or
+                            not serial_number or
+                            not record_number):
+                            messagebox.showwarning("Warning", "All fields must be filled")
+                        else:
+                            liker_info_list = []
+                            liker_info_list.append(fullname)
+                            liker_info_list.append(serial_number)
+                            liker_info_list.append(record_number)
+                            liker_info_list.append(username)
+                            
+                            with driver.session() as session:
+                                query = ("MATCH (:User)-"
+                                         "[c:CONTRACT {apartment_id: $ID}]-"
+                                         ">(:User) "
+                                         "SET c.liker_info = $info;")
+                        
+                                session.run(query,
+                                            info=liker_info_list,
+                                            ID=rows[current_index])
+
+                                query = ("MATCH (:User)-"
+                                         "[c:CONTRACT {apartment_id: $ID}]-"
+                                         ">(:User) "
+                                         "RETURN ((c.liker_info IS NOT NULL) AND "
+                                         "(c.owner_info IS NOT NULL)) AS both_ready;")
+
+                                result = session.run(query,
+                                            ID=rows[current_index])
+
+                                if result.single()["both_ready"]:
+                                    addToRentings()
+                
+    
+                    add_liker_window = Toplevel(my_contracts_window)
+                    add_liker_window.title("Add liker")
+                    add_liker_window.geometry("500x500")
+
+                    fullname_entry = Entry(add_liker_window, width=30)
+                    fullname_entry.place(x=175, y=80)
+
+                    serial_number_entry = Entry(add_liker_window, width=30)
+                    serial_number_entry.place(x=175, y=160)
+
+                    record_number_entry = Entry(add_liker_window, width=30)
+                    record_number_entry.place(x=175, y=200)
+
+                    add_button = Button(add_liker_window,
+                                           text="Add",
+                                           command=getUserCredentials)
+                    add_button.place(x=175, y=350)
+
+                with driver.session() as session:
+                    query = ("MATCH (:User)-"
+                             "[c:CONTRACT {apartment_id: $ID}]-"
+                             ">(:User) "
+                             "RETURN ((c.liker_info IS NOT NULL) AND "
+                             "(c.owner_info IS NOT NULL)) AS both_ready;")
+
+                    result = session.run(query,
+                                         ID=rows[current_index])
+
+                    if result.single()["both_ready"]:
+                        messagebox.showwarning("Warning", "You can add yourself only once")
+                    else:
+                        query = ("MATCH (o:User {username: $username})-"
+                                 "[:CONTRACT {apartment_id: $ID}]-"
+                                 ">(:User)"
+                                 "RETURN COUNT(o) > 0 AS is_owner;")
+                        
+                        result = session.run(query,
+                                             username=username,
+                                             ID=rows[current_index])
+
+                        if result.single()["is_owner"]:
+                            addOwner()
+                        else:
+                            addLiker()
+                
+                                      
+            def show_previous_record():
+                global current_index
+                if current_index > 0:
+                    current_index -= 1
+                    displayCurrentRecord()
+
+            def show_next_record():
+                global current_index
+                if current_index < len(rows) - 1:
+                    current_index += 1
+                    displayCurrentRecord()
+
+
+            apartment_text_widget = Text(my_contracts_window, wrap="word", height=9, width=30)
+            apartment_text_widget.pack(pady=10)
+
+            owner_text_widget = Text(my_contracts_window, wrap="word", height=5, width=30)
+            owner_text_widget.pack(pady=10)
+
+            liker_text_widget = Text(my_contracts_window, wrap="word", height=5, width=30)
+            liker_text_widget.pack(pady=10)
+
+            back_button = Button(my_contracts_window, text="Back", command=show_previous_record)
+            back_button.pack(side="left", padx=10)
+        
+            next_button = Button(my_contracts_window, text="Next", command=show_next_record)
+            next_button.pack(side="right", padx=10)
+
+            who_interested_in_button = Button(my_contracts_window,
+                                        text="Додати себе",
+                                        command=addMyself)
+            who_interested_in_button.place(x=300, y = 450)
+
+            delete_myselt_button = Button(my_contracts_window,
+                                        text="Видалити себе",
+                                        command=deleteMyself)
+            delete_myselt_button.place(x=100, y = 450)
+
+            displayCurrentRecord()
+        
+        
+        with driver.session() as session:
+            query = ("MATCH (:User {username: $username})-[c:CONTRACT]->() RETURN c.apartment_id as apartmentId;")
+            result = session.run(query, username=username)
+            owner_contracts = [record["apartmentId"] for record in result]
+
+            query = ("MATCH ()-[c:CONTRACT]->(:User {username: $username}) RETURN c.apartment_id as apartmentId;")
+            result = session.run(query, username=username)       
+            liker_contracts = [record["apartmentId"] for record in result]
+
+            all_contracts = owner_contracts + liker_contracts
+            
+        if len(all_contracts) == 0:
+            messagebox.showinfo("Info", "You have no contracts")
+        else:
+            watchMyContracts(all_contracts)
