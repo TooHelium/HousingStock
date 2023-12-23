@@ -40,9 +40,26 @@ def showSearch(username, root, connection, driver):
                     current_record = rows[current_index]
                     owner_username = current_record[1]
 
+                    columns_names = [
+                        "Apartment's id: ",
+                        "Owner's username: ",
+                        "District: ",
+                        "Street: ",
+                        "Building: ",
+                        "Area: ",
+                        "Rooms: ",
+                        "Is furnished: ",
+                        "Has balcony: ",
+                        "Has parking: ",
+                        "Estimated price: ",
+                        "Description: "
+                        ]
+
+                    result = [name + str(value) for name, value in zip(columns_names, current_record)]
+
                     text_widget.insert(END, f"Apartment № {current_index+1}\n")
-                    for value in current_record:
-                        text_widget.insert(END, f"{value}\n")
+                    for row in result:
+                        text_widget.insert(END, f"{row}\n")
                     
                     with driver.session() as session:
                         query = ("MATCH (:User {username: $liker_username})-[r:LIKES]"
@@ -115,7 +132,10 @@ def showSearch(username, root, connection, driver):
             with connection.cursor() as cursor:
                 if use_features_var.get():
                     cursor.execute(
-                        "SELECT apartments.id, apartments.user_id, apartments.building_name, streets.name, districts.name "
+                        "SELECT apartments.id, apartments.user_id, districts.name, streets.name, "
+                        "building_name, area, rooms, "
+                        "is_furnished, has_balcony, has_parking, "
+                        "estimated_price, description "
                         "FROM apartments "
                         "JOIN streets "
                         "ON apartments.street_id=streets.id "
@@ -133,7 +153,10 @@ def showSearch(username, root, connection, driver):
                         )
                 else:
                     cursor.execute(
-                        "SELECT apartments.id, apartments.user_id, apartments.building_name, streets.name, districts.name "
+                        "SELECT apartments.id, apartments.user_id, districts.name, streets.name, "
+                        "building_name, area, rooms, "
+                        "is_furnished, has_balcony, has_parking, "
+                        "estimated_price, description "
                         "FROM apartments "
                         "JOIN streets "
                         "ON apartments.street_id=streets.id "
