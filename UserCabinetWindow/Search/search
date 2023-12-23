@@ -1,0 +1,259 @@
+from tkinter import *
+from tkinter import messagebox
+
+def showSearch(username, root, connection, driver):
+        search_window = Toplevel(root)
+        search_window.title("Знайти квартиру")
+        search_window.geometry("500x500")
+        search_window.resizable(False, False)
+
+        def doSearch():            
+            big_number = 1000000
+            
+            district_name = district_var.get()
+            street_name = street_var.get()
+            building_name = building_name_entry.get()
+            
+            area = area_entry.get() if area_entry.get() else big_number
+                
+            rooms = rooms_entry.get() if rooms_entry.get() else big_number
+  
+            is_furnished = is_furnished_var.get()
+            has_balcony = has_balcony_var.get()
+            has_parking = has_parking_var.get()
+            
+            estimated_price = estimated_price_entry.get() if estimated_price_entry.get() else big_number
+
+            def watchFoundedApartments(rows):
+                global current_index
+                current_index = 0
+                
+                watch_window = Toplevel(search_window)
+                watch_window.title("Посторінковий перегляд")
+                watch_window.geometry("500x500")
+
+                def displayCurrentRecord():
+                    global owner_username
+                    
+                    text_widget.delete(1.0, END)
+                    
+                    current_record = rows[current_index]
+                    owner_username = current_record[1]
+
+                    text_widget.insert(END, f"Apartment № {current_index+1}\n")
+                    for value in current_record:
+                        text_widget.insert(END, f"{value}\n")
+                    
+                    with driver.session() as session:
+                        query = ("MATCH (:User {username: $liker_username})-[r:LIKES]"
+                                 "->(:Apartment {id: $ID})<-[:OWNS]"
+                                 "-(:User {username: $owner_username}) "
+                                 "RETURN COUNT(r) > 0 AS apartmentExists;")
+                        
+                        result = session.run(query, liker_username=username, ID=current_record[0], owner_username=owner_username)
+                        apartment_exists = result.single()["apartmentExists"]
+
+                        like_var.set(apartment_exists)
+
+                def onCheckboxChange():
+                    liked = like_var.get()
+
+                    with driver.session() as session:
+                        if liked:
+                            query = ("MERGE (u:User {username: $liker_username}) "
+                                     "MERGE (a:Apartment {id: $ID}) "
+                                     "MERGE (u)-[:LIKES]->(a) "
+                                     "MERGE (o:User {username: $owner_username}) "
+                                     "MERGE (o)-[:OWNS]->(a);")
+                        else:
+                            query = ("MATCH (u:User {username: $liker_username}) "
+                                     "MATCH (a:Apartment {id: $ID}) "
+                                     "MATCH (u)-[r:LIKES]->(a) "
+                                     "MATCH (o:User {username: $owner_username}) "
+                                     "MATCH (o)-[:OWNS]->(a) "
+                                     "DELETE r;")
+        
+                        session.run(query, liker_username=username,
+                                    ID=rows[current_index][0],
+                                    owner_username=owner_username)
+                        
+                        query = ("MATCH (n) WHERE NOT (n)--() DELETE n;")#clear single nodes
+                        session.run(query)
+                    
+                        
+                def show_previous_record():
+                    global current_index
+                    if current_index > 0:
+                        current_index -= 1
+                        displayCurrentRecord()
+
+                def show_next_record():
+                    global current_index
+                    if current_index < len(rows) - 1:
+                        current_index += 1
+                        displayCurrentRecord()
+
+                text_widget = Text(watch_window, wrap="word", height=20, width=60)
+                text_widget.pack(pady=10)
+
+                back_button = Button(watch_window, text="Back", command=show_previous_record)
+                back_button.pack(side="left", padx=10)
+        
+                next_button = Button(watch_window, text="Next", command=show_next_record)
+                next_button.pack(side="right", padx=10)
+
+                like_var = IntVar()
+                like_checkbox = Checkbutton(watch_window,
+                                            text="Like",
+                                            variable=like_var,
+                                            command=onCheckboxChange)
+                like_checkbox.place(x=300, y = 450)
+
+                displayCurrentRecord()
+ 
+                    
+            with connection.cursor() as cursor:
+                if use_features_var.get():
+                    cursor.execute(
+                        "SELECT apartments.id, apartments.user_id, apartments.building_name, streets.name, districts.name "
+                        "FROM apartments "
+                        "JOIN streets "
+                        "ON apartments.street_id=streets.id "
+                        "JOIN districts "
+                        "ON streets.district_id=districts.id "
+                        f"WHERE ((districts.name LIKE '{district_name}%') AND "
+                        f"(streets.name LIKE '{street_name}%') AND "
+                        f"(apartments.building_name LIKE '{building_name}%') AND "
+                        f"(apartments.area <= {area}) AND "
+                        f"(apartments.rooms <= {rooms}) AND "
+                        f"(apartments.is_furnished = '{is_furnished}') AND "
+                        f"(apartments.has_balcony = '{has_balcony}') AND "
+                        f"(apartments.has_parking = '{has_parking}') AND "
+                        f"(apartments.estimated_price <= {estimated_price}));"
+                        )
+                else:
+                    cursor.execute(
+                        "SELECT apartments.id, apartments.user_id, apartments.building_name, streets.name, districts.name "
+                        "FROM apartments "
+                        "JOIN streets "
+                        "ON apartments.street_id=streets.id "
+                        "JOIN districts "
+                        "ON streets.district_id=districts.id "
+                        f"WHERE ((districts.name LIKE '{district_name}%') AND "
+                        f"(streets.name LIKE '{street_name}%') AND "
+                        f"(apartments.building_name LIKE '{building_name}%') AND "
+                        f"(apartments.area <= {area}) AND "
+                        f"(apartments.rooms <= {rooms}) AND "
+                        f"(apartments.estimated_price <= {estimated_price}));"
+                        )
+                rows = cursor.fetchall()
+
+            if rows:
+                watchFoundedApartments(rows)
+            else:
+                messagebox.showinfo("Info", "No appartments found")
+           
+        def updateStreetsDropdown(*args):
+            global streets_id, streets_name
+
+            if district_var.get() == "":
+                street_var.set("")
+                street_dropdown['menu'].delete(0, 'end')
+                street_dropdown['menu'].add_command(label="",
+                                                    command=lambda: street_var.set(""))
+                return
+        
+            with connection.cursor() as cursor:
+                cursor.execute("SELECT streets.id, streets.name FROM streets "
+                               "JOIN districts "
+                               "ON streets.district_id = districts.id "
+                              f"WHERE districts.name = '{district_var.get()}';")
+                streets_id_name = cursor.fetchall()
+                streets_id = [row[0] for row in streets_id_name]
+                streets_name = [row[1] for row in streets_id_name]
+                
+
+            street_var.set(streets_name[0])
+            street_dropdown['menu'].delete(0, 'end')
+            for street_name in streets_name:
+                street_dropdown['menu'].add_command(label=street_name, command=lambda name=street_name: street_var.set(name))
+            street_dropdown['menu'].add_command(label="", command=lambda: street_var.set(""))
+
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id, name FROM districts;")
+            districts_id_name = cursor.fetchall()
+            districts_id = [row[0] for row in districts_id_name]
+            districts_name = [row[1] for row in districts_id_name]
+            districts_name.append("")
+        district_var = StringVar(search_window)
+        district_var.set(districts_name[0])
+        district_var.trace_add('write', updateStreetsDropdown) 
+        district_dropdown = OptionMenu(search_window,
+                                       district_var,
+                                       *districts_name)
+
+
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT streets.id, streets.name FROM streets "
+                            "JOIN districts "
+                            "ON streets.district_id = districts.id "
+                            f"WHERE districts.name = '{district_var.get()}';")
+            streets_id_name = cursor.fetchall()
+            streets_id = [row[0] for row in streets_id_name]
+            streets_name = [row[1] for row in streets_id_name]
+            streets_name.append("")
+        
+        street_var = StringVar(search_window)
+        street_var.set(streets_name[0])
+        street_dropdown = OptionMenu(search_window,
+                                     street_var,
+                                     *streets_name)
+
+        use_features_var = IntVar()
+        use_features_checkbox = Checkbutton(search_window,
+                                            text="Use features?",
+                                            variable=use_features_var)
+        
+
+        building_name_entry = Entry(search_window, width=30)
+        area_entry = Entry(search_window, width=30)
+        rooms_entry = Entry(search_window, width=30)
+
+        is_furnished_var = IntVar()
+        is_furnished_checkbox = Checkbutton(search_window, text="Furnished", variable=is_furnished_var)
+
+        has_balcony_var = IntVar()
+        has_balcony_checkbox = Checkbutton(search_window, text="Has Balcony", variable=has_balcony_var)
+
+        has_parking_var = IntVar()
+        has_parking_checkbox = Checkbutton(search_window, text="Has Parking", variable=has_parking_var)
+
+        estimated_price_entry = Entry(search_window, width=30)
+
+        Label(search_window, text="Building Name:").grid(row=0, column=0, padx=10, pady=5)
+        Label(search_window, text="Area <=:").grid(row=1, column=0, padx=10, pady=5)
+        Label(search_window, text="Rooms <=:").grid(row=2, column=0, padx=10, pady=5)
+        Label(search_window, text="Features:").grid(row=3, column=0, padx=10, pady=5)
+        Label(search_window, text="Estimated Price <=:").grid(row=4, column=0, padx=10, pady=5)
+        Label(search_window, text="District:").grid(row=5, column=0, padx=10, pady=5)
+        Label(search_window, text="Street:").grid(row=6, column=0, padx=10, pady=5)
+        Label(search_window, text="Other option:").grid(row=7, column=0, padx=10, pady=5)
+
+        building_name_entry.grid(row=0, column=1, padx=10, pady=10)
+        area_entry.grid(row=1, column=1, padx=10, pady=10)
+        rooms_entry.grid(row=2, column=1, padx=10, pady=10)
+
+        is_furnished_checkbox.grid(row=3, column=1, padx=(10, 10), sticky="w")
+        has_balcony_checkbox.grid(row=3, column=1, padx=(120, 10), sticky="w")
+        has_parking_checkbox.grid(row=3, column=1, padx=(230, 10), sticky="w")
+
+        estimated_price_entry.grid(row=4, column=1, padx=10, pady=15)
+
+        district_dropdown.grid(row=5, column=1, padx=10, pady=10, sticky="ew")
+        street_dropdown.grid(row=6, column=1, padx=10, pady=10, sticky="ew")
+
+        use_features_checkbox.grid(row=7, column=1, padx=10, pady=10, sticky="w")
+
+        rent_out_button = Button(search_window, text="Search", command=doSearch)
+        rent_out_button.grid(row=8, column=0, columnspan=2, pady=40)
