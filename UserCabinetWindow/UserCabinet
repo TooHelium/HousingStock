@@ -1,0 +1,65 @@
+from tkinter import *
+from tkcalendar import Calendar
+
+from UserCabinetWindow.Search import search
+from UserCabinetWindow.RentOut import rentOut
+from UserCabinetWindow.MyContracts import myContracts
+from UserCabinetWindow.MyLikes import myLikes
+from UserCabinetWindow.MyApartments import myApartments
+from UserCabinetWindow.CreateReport import createReport
+
+def openUserCabinet(is_admin, username, root, connection, driver):
+    user_cabinet_window = Toplevel(root)
+    user_cabinet_window.title(username + "@admin" if is_admin else username)
+    user_cabinet_window.geometry("500x500")
+    user_cabinet_window.resizable(False, False)
+        
+    my_apartments_button = Button(user_cabinet_window,
+                                  text="My apartments",
+                                  command=lambda: myApartments.showMyApartments(username, root, connection, driver))
+    my_apartments_button.place(x=100, y=80)
+
+    my_likes_button = Button(user_cabinet_window,
+                                  text="My likes",
+                                  command=lambda: myLikes.showMyLikes(username, root, connection, driver))
+    my_likes_button.place(x=100, y=160)
+
+    my_contracts_button = Button(user_cabinet_window,
+                                  text="My contracts",
+                                  command=lambda: myContracts.showMyContracts(username, root, connection, driver))
+    my_contracts_button.place(x=100, y=240)
+
+    rent_out_button = Button(user_cabinet_window,
+                                  text="Rent out",
+                                  command=lambda: rentOut.showRentOut(username, root, connection, driver))
+    rent_out_button.place(x=100, y=320)
+
+    search_button = Button(user_cabinet_window,
+                                  text="Search",
+                                  command=lambda: search.showSearch(username, root, connection, driver))
+    search_button.place(x=100, y=400)
+
+    calendar = Calendar(user_cabinet_window, selectmode="day", year=2023, month=12, day=23)
+    calendar.place(x=user_cabinet_window.winfo_width() - 250, y=0)
+
+    if is_admin:
+        with connection.cursor() as cursor:
+            cursor.execute("SELECT id, name FROM districts;")
+            districts_id_name = cursor.fetchall()
+            districts_id = [row[0] for row in districts_id_name]
+            districts_name = [row[1] for row in districts_id_name]
+            districts_name.append("")
+        district_var = StringVar(user_cabinet_window)
+        district_var.set(districts_name[0])
+        district_dropdown = OptionMenu(user_cabinet_window,
+                                       district_var,
+                                       *districts_name)
+
+        district_dropdown.place(x=350, y=350)
+
+        create_report_button = Button(user_cabinet_window,
+                                      text="Create report",
+                                      command=lambda: createReport.create(district_var.get(), username, root, connection, driver))
+        create_report_button.place(x=350, y=400)
+
+            
